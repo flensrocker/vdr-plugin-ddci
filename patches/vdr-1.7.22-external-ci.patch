@@ -1,0 +1,166 @@
+diff --git a/ci.h b/ci.h
+index 71bbdf9..2946d37 100644
+--- a/ci.h
++++ b/ci.h
+@@ -72,6 +72,7 @@ public:
+   };
+ 
+ class cDevice;
++class cTSBuffer;
+ class cCamSlot;
+ 
+ enum eModuleStatus { msNone, msReset, msPresent, msReady };
+@@ -115,6 +116,10 @@ public:
+        ///< The derived class must call Cancel(3) in its destructor.
+   virtual bool Ready(void);
+        ///< Returns 'true' if all present CAMs in this adapter are ready.
++  virtual cTSBuffer *GetTSBuffer(int FdDvr) { return NULL; }
++       ///< Derived classes can return a special TS buffer with features
++       ///< like rerouting the stream through an external ci.
++       ///< The caller must delete the buffer.
+   };
+ 
+ class cTPDU;
+diff --git a/dvbci.c b/dvbci.c
+index 5289bbd..08baeff 100644
+--- a/dvbci.c
++++ b/dvbci.c
+@@ -43,6 +43,13 @@ cDvbCiAdapter::~cDvbCiAdapter()
+   Cancel(3);
+ }
+ 
++cTSBuffer *cDvbCiAdapter::GetTSBuffer(int FdDvr)
++{
++  if (device)
++     return new cTSBuffer(FdDvr, MEGABYTE(2), device->CardIndex() + 1);
++  return NULL;
++}
++
+ int cDvbCiAdapter::Read(uint8_t *Buffer, int MaxLength)
+ {
+   if (Buffer && MaxLength > 0) {
+@@ -101,8 +108,43 @@ bool cDvbCiAdapter::Assign(cDevice *Device, bool Query)
+ 
+ cDvbCiAdapter *cDvbCiAdapter::CreateCiAdapter(cDevice *Device, int Fd)
+ {
+-  // TODO check whether a CI is actually present?
+-  if (Device)
+-     return new cDvbCiAdapter(Device, Fd);
+-  return NULL;
++  // don't create a ci-adapter if it's not useable
++  if (Device && (Fd >= 0)) {
++     ca_caps_t Caps;
++     if (ioctl(Fd, CA_GET_CAP, &Caps) == 0) {
++        if ((Caps.slot_type & CA_CI_LINK) != 0) {
++           int NumSlots = Caps.slot_num;
++           if (NumSlots > 0)
++              return new cDvbCiAdapter(Device, Fd);
++           else
++              esyslog("ERROR: no CAM slots found on device %d", Device->DeviceNumber());
++           }
++        else
++           isyslog("device %d doesn't support CI link layer interface", Device->DeviceNumber());
++        }
++     else
++        esyslog("ERROR: can't get CA capabilities on device %d", Device->DeviceNumber());
++     close(Fd);
++     }
++  // try to find an external ci-adapter
++  for (cDvbCiAdapterProbe *cp = DvbCiAdapterProbes.First(); cp; cp = DvbCiAdapterProbes.Next(cp)) {
++      cDvbCiAdapter *ca = cp->Probe(Device);
++      if (ca)
++         return ca;
++      }
++ return NULL;
++}
++
++// --- cDvbCiAdapterProbe -------------------------------------------------------
++
++cList<cDvbCiAdapterProbe> DvbCiAdapterProbes;
++
++cDvbCiAdapterProbe::cDvbCiAdapterProbe(void)
++{
++  DvbCiAdapterProbes.Add(this);
++}
++
++cDvbCiAdapterProbe::~cDvbCiAdapterProbe()
++{
++  DvbCiAdapterProbes.Del(this, false);
+ }
+diff --git a/dvbci.h b/dvbci.h
+index adbe40d..39c7d51 100644
+--- a/dvbci.h
++++ b/dvbci.h
+@@ -25,7 +25,28 @@ protected:
+   cDvbCiAdapter(cDevice *Device, int Fd);
+ public:
+   virtual ~cDvbCiAdapter();
++  virtual cTSBuffer *GetTSBuffer(int FdDvr);
+   static cDvbCiAdapter *CreateCiAdapter(cDevice *Device, int Fd);
+   };
+ 
++// A plugin that implements an external DVB ci-adapter derived from cDvbCiAdapter needs to create
++// a cDvbCiAdapterProbe derived object on the heap in order to have its Probe()
++// function called, where it can actually create the appropriate ci-adapter.
++// The cDvbCiAdapterProbe object must be created in the plugin's constructor,
++// and deleted in its destructor.
++// Every plugin has to track its own list of already used device nodes.
++// The Probes are always called if the base cDvbCiAdapter can't create a ci-adapter on its own.
++
++class cDvbCiAdapterProbe : public cListObject {
++public:
++  cDvbCiAdapterProbe(void);
++  virtual ~cDvbCiAdapterProbe();
++  virtual cDvbCiAdapter *Probe(cDevice *Device) = 0;
++     ///< Probes for a DVB ci-adapter for the given Device and creates the appropriate
++     ///< object derived from cDvbCiAdapter if applicable.
++     ///< Returns NULL if no adapter has been created.
++  };
++
++extern cList<cDvbCiAdapterProbe> DvbCiAdapterProbes;
++
+ #endif //__DVBCI_H
+diff --git a/dvbdevice.c b/dvbdevice.c
+index 163fce3..1d1b655 100644
+--- a/dvbdevice.c
++++ b/dvbdevice.c
+@@ -965,9 +965,8 @@ cDvbDevice::cDvbDevice(int Adapter, int Frontend)
+ 
+   // Common Interface:
+ 
+-  fd_ca = DvbOpen(DEV_DVB_CA, adapter, frontend, O_RDWR);
+-  if (fd_ca >= 0)
+-     ciAdapter = cDvbCiAdapter::CreateCiAdapter(this, fd_ca);
++  int fd_ca = DvbOpen(DEV_DVB_CA, adapter, frontend, O_RDWR);
++  ciAdapter = cDvbCiAdapter::CreateCiAdapter(this, fd_ca);
+ 
+   // The DVR device (will be opened and closed as needed):
+ 
+@@ -1424,8 +1423,12 @@ bool cDvbDevice::OpenDvr(void)
+ {
+   CloseDvr();
+   fd_dvr = DvbOpen(DEV_DVB_DVR, adapter, frontend, O_RDONLY | O_NONBLOCK, true);
+-  if (fd_dvr >= 0)
+-     tsBuffer = new cTSBuffer(fd_dvr, MEGABYTE(2), CardIndex() + 1);
++  if (fd_dvr >= 0) {
++     if (ciAdapter)
++        tsBuffer = ciAdapter->GetTSBuffer(fd_dvr);
++     if (tsBuffer == NULL)
++        tsBuffer = new cTSBuffer(fd_dvr, MEGABYTE(2), CardIndex() + 1);
++     }
+   return fd_dvr >= 0;
+ }
+ 
+diff --git a/dvbdevice.h b/dvbdevice.h
+index 2072ab2..d664a3b 100644
+--- a/dvbdevice.h
++++ b/dvbdevice.h
+@@ -121,7 +121,7 @@ private:
+   dvb_frontend_info frontendInfo;
+   int numProvidedSystems;
+   fe_delivery_system frontendType;
+-  int fd_dvr, fd_ca;
++  int fd_dvr;
+   static cMutex bondMutex;
+   cDvbDevice *bondedDevice;
+   mutable bool needsDetachBondedReceivers;
