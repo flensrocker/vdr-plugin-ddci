@@ -4,28 +4,7 @@
 
 #include <vdr/dvbdevice.h>
 
-ddci::cDdDvbCiAdapter::cDdDvbCiAdapter(cDevice *Device, int Fd, const char *AdapterNum, const char *DeviceNum, const char *DevNode)
- :cDvbCiAdapter(Device, Fd)
- ,devNode(DevNode)
-{
-  cDdDvbCiAdapterProbe::probedDevices.Append((char*)*devNode);
-}
-
-ddci::cDdDvbCiAdapter::~cDdDvbCiAdapter(void)
-{
-  int i = cDdDvbCiAdapterProbe::probedDevices.Find(*devNode);
-  if (i >= 0)
-     cDdDvbCiAdapterProbe::probedDevices.Remove(i);
-}
-
-cTSBuffer *ddci::cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
-{
-  return cDvbCiAdapter::GetTSBuffer(FdDvr);
-}
-
-// --- cDdDvbCiAdapterProbe --------------------------------------------------
-
-cStringList  ddci::cDdDvbCiAdapterProbe::probedDevices;
+// --- helper ----------------------------------------------------------------
 
 static cString DvbDeviceName(const char *Name, const char *Adapter, const char *Device)
 {
@@ -45,6 +24,39 @@ static bool DvbDeviceNodeExists(const char *Name, const char *Adapter, const cha
   return false;
 }
 
+// --- cDdDvbCiAdapter -------------------------------------------------------
+
+ddci::cDdDvbCiAdapter::cDdDvbCiAdapter(cDevice *Device, int Fd, const char *AdapterNum, const char *DeviceNum, const char *DevNode)
+ :cDvbCiAdapter(Device, Fd)
+ ,device(Device)
+ ,devNode(DevNode)
+ ,adapterNum(AdapterNum)
+ ,deviceNum(DeviceNum)
+{
+  cDdDvbCiAdapterProbe::probedDevices.Append((char*)*devNode);
+}
+
+ddci::cDdDvbCiAdapter::~cDdDvbCiAdapter(void)
+{
+  int i = cDdDvbCiAdapterProbe::probedDevices.Find(*devNode);
+  if (i >= 0)
+     cDdDvbCiAdapterProbe::probedDevices.Remove(i);
+}
+
+cTSBuffer *ddci::cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
+{
+  int fd_sec = open(*DvbDeviceName("sec", *adapterNum, *deviceNum), O_RDWR);
+  if (fd_sec >= 0) {
+     cTSTransfer *transfer = new cTSTransfer(FdDvr, fd_sec, device->CardIndex() + 1);
+     return new cTSTransferBuffer(fd_sec, MEGABYTE(2), device->CardIndex() + 1, transfer);
+     }
+  return cDvbCiAdapter::GetTSBuffer(FdDvr);
+}
+
+// --- cDdDvbCiAdapterProbe --------------------------------------------------
+
+cStringList  ddci::cDdDvbCiAdapterProbe::probedDevices;
+
 cDvbCiAdapter *ddci::cDdDvbCiAdapterProbe::Probe(cDevice *Device)
 {
   cDvbCiAdapter *ci = NULL;
@@ -61,7 +73,7 @@ cDvbCiAdapter *ddci::cDdDvbCiAdapterProbe::Probe(cDevice *Device)
   const char *devnode;
   const char *adapterNum;
   const char *deviceNum;
-  int fd_ca;
+  int fd_ca = -1;
   if (e == NULL) {
      esyslog("ddci: can't enum devices");
      goto unref;
@@ -95,6 +107,7 @@ cDvbCiAdapter *ddci::cDdDvbCiAdapterProbe::Probe(cDevice *Device)
                     fd_ca = open(*DvbDeviceName(DEV_DVB_CA, adapterNum, deviceNum), O_RDWR);
                     if (fd_ca >= 0) {
                        ci = new cDdDvbCiAdapter(Device, fd_ca, adapterNum, deviceNum, devnode);
+                       fd_ca = -1;
                        goto unref;
                        }
                     }
@@ -106,6 +119,8 @@ cDvbCiAdapter *ddci::cDdDvbCiAdapterProbe::Probe(cDevice *Device)
         l = udev_list_entry_get_next(l);
         }
 unref:
+  if (fd_ca >= 0)
+     close(fd_ca);
   if (dev != NULL)
      udev_device_unref(dev);
   if (e != NULL)
@@ -113,4 +128,64 @@ unref:
   if (udev != NULL)
      udev_unref(udev);
   return ci;
+}
+
+// --- cTSTransfer -----------------------------------------------------------
+
+ddci::cTSTransfer::cTSTransfer(int ReadFd, int WriteFd, int CardIndex)
+:readFd(ReadFd)
+,writeFd(WriteFd)
+,cardIndex(CardIndex)
+{
+  SetDescription("TS transfer on device %d", cardIndex);
+  Start();
+}
+
+ddci::cTSTransfer::~cTSTransfer()
+{
+  Cancel(3);
+}
+
+void ddci::cTSTransfer::Action(void)
+{
+  int bufSize = MEGABYTE(2);
+  uint8_t *buffer = new uint8_t[bufSize];
+  ssize_t r;
+  ssize_t w;
+  if (buffer) {
+     bool firstRead = true;
+     cPoller Poller(readFd);
+     while (Running()) {
+           if (firstRead || Poller.Poll(100)) {
+              if (!Running())
+                 break;
+              firstRead = false;
+              r = safe_read(readFd, buffer, bufSize);
+              if (r < 0)
+                 esyslog("ddci: read error on transfer buffer on device %d", cardIndex);
+              else {
+                 w = safe_write(writeFd, buffer, r);
+                 if (w != r)
+                    esyslog("ddci: write error on transfer buffer on device %d", cardIndex);
+                 }
+              }
+           }
+     }
+}
+
+// --- cTSTransferBuffer -----------------------------------------------------
+
+ddci::cTSTransferBuffer::cTSTransferBuffer(int File, int Size, int CardIndex, cTSTransfer *Transfer)
+:cTSBuffer(File, Size, CardIndex)
+,file(File)
+,transfer(Transfer)
+{
+}
+
+ddci::cTSTransferBuffer::~cTSTransferBuffer()
+{
+  Cancel(3);
+  if (transfer)
+     delete transfer;
+  close(file);
 }
