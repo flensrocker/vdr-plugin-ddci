@@ -17,3 +17,10 @@ A plugin which creates DVB CI adapters from "stand alone" ca-devices
 like the ones from Digital Devices.
 
 Needs the "external-ci" patch for vdr, look at patches directory.
+It adds an probe-interface to vdr-core which will allow the creation
+and use of external ci-adapters.
+
+The CI devices of the Digital Devices or Linux4Media are not bound to
+a dedicated DVB adapter. There will be only a ca- and a sec-device.
+The ca-device has to used like every other ca-device, but the packets
+to be descrambled have to be written to and read from sec.

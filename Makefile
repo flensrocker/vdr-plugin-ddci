@@ -19,6 +19,7 @@ VERSION = $(shell grep 'static const char \*VERSION *=' $(PLUGIN).c | awk '{ pri
 
 CXX      ?= g++
 CXXFLAGS ?= -g -O3 -Wall -Woverloaded-virtual -Wno-parentheses
+LDFLAGS  += `pkg-config --libs libudev`
 
 ### The directory environment:
 
@@ -51,7 +52,7 @@ DEFINES += -D_GNU_SOURCE -DPLUGIN_NAME_I18N='"$(PLUGIN)"'
 
 ### The object files (add further files here):
 
-OBJS = $(PLUGIN).o
+OBJS = $(PLUGIN).o dddvbci.o
 
 ### The main target:
 
@@ -99,7 +100,7 @@ i18n: $(I18Nmsgs) $(I18Npot)
 ### Targets:
 
 libvdr-$(PLUGIN).so: $(OBJS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared $(OBJS) -o $@
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared $(OBJS) $(LDFLAGS) -o $@
 	@cp --remove-destination $@ $(LIBDIR)/$@.$(APIVERSION)
 
 dist: $(I18Npo) clean
