@@ -21,6 +21,19 @@ index 71bbdf9..2946d37 100644
    };
  
  class cTPDU;
+diff --git a/device.h b/device.h
+index e2ff812..949d59e 100644
+--- a/device.h
++++ b/device.h
+@@ -762,7 +762,7 @@ private:
+   virtual void Action(void);
+ public:
+   cTSBuffer(int File, int Size, int CardIndex);
+-  ~cTSBuffer();
++  virtual ~cTSBuffer();
+   uchar *Get(void);
+   };
+ 
 diff --git a/dvbci.c b/dvbci.c
 index 5289bbd..08baeff 100644
 --- a/dvbci.c
