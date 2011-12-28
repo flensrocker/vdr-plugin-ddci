@@ -36,6 +36,7 @@ ddci::cDdDvbCiAdapter::cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSec, con
  ,devNode(DevNode)
  ,adapterNum(AdapterNum)
  ,deviceNum(DeviceNum)
+ ,idle(false)
  ,transferBuffer(NULL)
 {
   index = 0;
@@ -58,7 +59,25 @@ ddci::cDdDvbCiAdapter::~cDdDvbCiAdapter(void)
   int i = cDdDvbCiAdapterProbe::probedDevices.Find(*devNode);
   if (i >= 0)
      cDdDvbCiAdapterProbe::probedDevices.Remove(i);
+  CloseSec();
+}
+
+bool ddci::cDdDvbCiAdapter::OpenSec(void)
+{
+  if (fdSec >= 0)
+     return true;
+  fdSec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR);
+  return (fdSec >= 0);
+}
+
+void ddci::cDdDvbCiAdapter::CloseSec(void)
+{
+  if (fdSec < 0)
+     return;
+  if (transferBuffer)
+     transferBuffer->Stop();
   close(fdSec);
+  fdSec = -1;
 }
 
 cTSBuffer *ddci::cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
@@ -68,6 +87,18 @@ cTSBuffer *ddci::cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
      return transferBuffer;
      }
   return cDvbCiAdapter::GetTSBuffer(FdDvr);
+}
+
+bool ddci::cDdDvbCiAdapter::SetIdle(bool Idle, bool TestOnly)
+{
+  if (TestOnly || (idle == Idle))
+     return true;
+  if (Idle)
+     CloseSec();
+  else
+     OpenSec();
+  idle = Idle;
+  return true;
 }
 
 void ddci::cDdDvbCiAdapter::Stop(void)
@@ -131,13 +162,17 @@ cDvbCiAdapter *ddci::cDdDvbCiAdapterProbe::Probe(cDevice *Device)
                   && !DvbDeviceNodeExists(DEV_DVB_FRONTEND, adapterNum, deviceNum)
                   && DvbDeviceNodeExists("sec", adapterNum, deviceNum)) {
                     fd_ca = open(*DvbDeviceName(DEV_DVB_CA, adapterNum, deviceNum), O_RDWR);
-                    if ((fd_ca >= 0) && (cDvbCiAdapter::GetNumCamSlots(Device, fd_ca, NULL) > 0)) {
-                       fd_sec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR);
-                       if (fd_sec >= 0) {
-                          ci = new cDdDvbCiAdapter(Device, fd_ca, fd_sec, adapterNum, deviceNum, devnode);
-                          fd_ca = -1;
-                          fd_sec = -1;
-                          goto unref;
+                    if (fd_ca >= 0) {
+                       int numSlots = cDvbCiAdapter::GetNumCamSlots(Device, fd_ca, NULL);
+                       isyslog("ddci: with %d cam slots", numSlots);
+                       if (numSlots > 0) {
+                          fd_sec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR);
+                          if (fd_sec >= 0) {
+                             ci = new cDdDvbCiAdapter(Device, fd_ca, fd_sec, adapterNum, deviceNum, devnode);
+                             fd_ca = -1;
+                             fd_sec = -1;
+                             goto unref;
+                             }
                           }
                        }
                     }
