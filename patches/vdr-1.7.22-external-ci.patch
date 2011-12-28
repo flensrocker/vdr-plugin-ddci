@@ -35,10 +35,36 @@ index e2ff812..949d59e 100644
    };
  
 diff --git a/dvbci.c b/dvbci.c
-index 5289bbd..08baeff 100644
+index 5289bbd..2ae5815 100644
 --- a/dvbci.c
 +++ b/dvbci.c
-@@ -43,6 +43,13 @@ cDvbCiAdapter::~cDvbCiAdapter()
+@@ -19,23 +19,8 @@ cDvbCiAdapter::cDvbCiAdapter(cDevice *Device, int Fd)
+   device = Device;
+   SetDescription("CI adapter on device %d", device->DeviceNumber());
+   fd = Fd;
+-  ca_caps_t Caps;
+-  if (ioctl(fd, CA_GET_CAP, &Caps) == 0) {
+-     if ((Caps.slot_type & CA_CI_LINK) != 0) {
+-        int NumSlots = Caps.slot_num;
+-        if (NumSlots > 0) {
+-           for (int i = 0; i < NumSlots; i++)
+-               new cCamSlot(this);
+-           Start();
+-           }
+-        else
+-           esyslog("ERROR: no CAM slots found on device %d", device->DeviceNumber());
+-        }
+-     else
+-        isyslog("device %d doesn't support CI link layer interface", device->DeviceNumber());
+-     }
+-  else
+-     esyslog("ERROR: can't get CA capabilities on device %d", device->DeviceNumber());
++  GetNumCamSlots(Device, Fd, this);
++  Start();
+ }
+ 
+ cDvbCiAdapter::~cDvbCiAdapter()
+@@ -43,6 +28,13 @@ cDvbCiAdapter::~cDvbCiAdapter()
    Cancel(3);
  }
  
@@ -52,32 +78,48 @@ index 5289bbd..08baeff 100644
  int cDvbCiAdapter::Read(uint8_t *Buffer, int MaxLength)
  {
    if (Buffer && MaxLength > 0) {
-@@ -101,8 +108,43 @@ bool cDvbCiAdapter::Assign(cDevice *Device, bool Query)
+@@ -99,10 +91,60 @@ bool cDvbCiAdapter::Assign(cDevice *Device, bool Query)
+   return true;
+ }
  
- cDvbCiAdapter *cDvbCiAdapter::CreateCiAdapter(cDevice *Device, int Fd)
- {
--  // TODO check whether a CI is actually present?
--  if (Device)
--     return new cDvbCiAdapter(Device, Fd);
--  return NULL;
-+  // don't create a ci-adapter if it's not useable
-+  if (Device && (Fd >= 0)) {
++int cDvbCiAdapter::GetNumCamSlots(cDevice *Device, int Fd, cCiAdapter *CiAdapter)
++{
++  int NumSlots = -1;
++  if (Fd >= 0) {
 +     ca_caps_t Caps;
 +     if (ioctl(Fd, CA_GET_CAP, &Caps) == 0) {
 +        if ((Caps.slot_type & CA_CI_LINK) != 0) {
-+           int NumSlots = Caps.slot_num;
-+           if (NumSlots > 0)
-+              return new cDvbCiAdapter(Device, Fd);
-+           else
++           NumSlots = Caps.slot_num;
++           if (NumSlots == 0)
 +              esyslog("ERROR: no CAM slots found on device %d", Device->DeviceNumber());
++           else if (CiAdapter != NULL) {
++              for (int i = 0; i < NumSlots; i++)
++                  new cCamSlot(CiAdapter);
++              }
++           else
++              return NumSlots;
 +           }
 +        else
 +           isyslog("device %d doesn't support CI link layer interface", Device->DeviceNumber());
 +        }
 +     else
 +        esyslog("ERROR: can't get CA capabilities on device %d", Device->DeviceNumber());
-+     close(Fd);
 +     }
++  return -1;
++}
++
+ cDvbCiAdapter *cDvbCiAdapter::CreateCiAdapter(cDevice *Device, int Fd)
+ {
+-  // TODO check whether a CI is actually present?
+-  if (Device)
++  // don't create a ci-adapter if it's not useable
++  if (Device && (Fd >= 0) && (GetNumCamSlots(Device, Fd, NULL) > 0))
+      return new cDvbCiAdapter(Device, Fd);
+-  return NULL;
++
++  if (Fd >= 0)
++     close(Fd);
++
 +  // try to find an external ci-adapter
 +  for (cDvbCiAdapterProbe *cp = DvbCiAdapterProbes.First(); cp; cp = DvbCiAdapterProbes.Next(cp)) {
 +      cDvbCiAdapter *ca = cp->Probe(Device);
@@ -101,14 +143,17 @@ index 5289bbd..08baeff 100644
 +  DvbCiAdapterProbes.Del(this, false);
  }
 diff --git a/dvbci.h b/dvbci.h
-index adbe40d..39c7d51 100644
+index adbe40d..9a4d802 100644
 --- a/dvbci.h
 +++ b/dvbci.h
-@@ -25,7 +25,28 @@ protected:
+@@ -25,7 +25,31 @@ protected:
    cDvbCiAdapter(cDevice *Device, int Fd);
  public:
    virtual ~cDvbCiAdapter();
 +  virtual cTSBuffer *GetTSBuffer(int FdDvr);
++  static int GetNumCamSlots(cDevice *Device, int Fd, cCiAdapter *CiAdapter);
++   ///< Tests if the CA device is usable for vdr.
++   ///< If CiAdapter is not NULL it will create the CamSlots for the given ci-adapter.
    static cDvbCiAdapter *CreateCiAdapter(cDevice *Device, int Fd);
    };
  
