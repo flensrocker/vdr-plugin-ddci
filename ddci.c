@@ -85,6 +85,7 @@ bool cPluginDdci::Start(void)
 void cPluginDdci::Stop(void)
 {
   // Stop any background activities the plugin is performing.
+  ddci::cDdDvbCiAdapter::Stop();
 }
 
 void cPluginDdci::Housekeeping(void)

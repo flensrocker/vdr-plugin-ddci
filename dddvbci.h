@@ -6,18 +6,28 @@
 
 namespace ddci
 {
+  class cTSTransferBuffer;
+
   class cDdDvbCiAdapter : public cDvbCiAdapter
   {
+  friend class cTSTransferBuffer;
   private:
+    static cDdDvbCiAdapter *ddCiAdapter[MAXDEVICES];
+    static int numDdCiAdapter;
+
     cDevice *device;
+    int     fdSec;
     cString devNode;
     cString adapterNum;
     cString deviceNum;
-
+    int     index;
+    cTSTransferBuffer *transferBuffer;
   public:
-    cDdDvbCiAdapter(cDevice *Device, int Fd, const char *AdapterNum, const char *DeviceNum, const char *DevNode);
+    cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSec, const char *AdapterNum, const char *DeviceNum, const char *DevNode);
     virtual ~cDdDvbCiAdapter(void);
     virtual cTSBuffer *GetTSBuffer(int FdDvr);
+
+    static void Stop(void);
   };
 
   class cDdDvbCiAdapterProbe : public cDvbCiAdapterProbe
@@ -34,9 +44,9 @@ namespace ddci
   class cTSTransfer : public cThread
   {
   private:
-    int  readFd;
     int  writeFd;
     int  cardIndex;
+    cTSBuffer *reader;
 
     virtual void Action(void);
   public:
@@ -47,12 +57,13 @@ namespace ddci
   class cTSTransferBuffer : public cTSBuffer
   {
   private:
-    int file;
+    cDdDvbCiAdapter *ciAdapter;
     cTSTransfer *transfer;
 
   public:
-    cTSTransferBuffer(int File, int Size, int CardIndex, cTSTransfer *Transfer);
+    cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSec, int CardIndex);
     virtual ~cTSTransferBuffer();
+    void Stop(void);
   };
 }
 
