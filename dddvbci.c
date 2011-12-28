@@ -148,12 +148,12 @@ ddci::cTSTransfer::~cTSTransfer()
 
 void ddci::cTSTransfer::Action(void)
 {
-  int bufSize = MEGABYTE(2);
+  int bufSize = 50 * TS_SIZE; // MEGABYTE(2);
   uint8_t *buffer = new uint8_t[bufSize];
   ssize_t r;
   ssize_t w;
   if (buffer) {
-     bool firstRead = true;
+     bool firstRead = false;
      cPoller Poller(readFd);
      while (Running()) {
            if (firstRead || Poller.Poll(100)) {
@@ -161,15 +161,22 @@ void ddci::cTSTransfer::Action(void)
                  break;
               firstRead = false;
               r = safe_read(readFd, buffer, bufSize);
-              if (r < 0)
-                 esyslog("ddci: read error on transfer buffer on device %d", cardIndex);
+              if (!Running())
+                 break;
+              if (r < 0) {
+                 if (FATALERRNO)
+                    esyslog("ddci: read error on transfer buffer on device %d", cardIndex);
+                 }
               else {
+                 if ((r % TS_SIZE) != 0)
+                    isyslog("ddci: read only %d bytes instead of %d", r, bufSize);
                  w = safe_write(writeFd, buffer, r);
                  if (w != r)
                     esyslog("ddci: write error on transfer buffer on device %d", cardIndex);
                  }
               }
            }
+     delete [] buffer;
      }
 }
 

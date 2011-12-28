@@ -52,7 +52,7 @@ namespace ddci
 
   public:
     cTSTransferBuffer(int File, int Size, int CardIndex, cTSTransfer *Transfer);
-    ~cTSTransferBuffer();
+    virtual ~cTSTransferBuffer();
   };
 }
 
