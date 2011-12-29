@@ -26,10 +26,10 @@ static bool DvbDeviceNodeExists(const char *Name, const char *Adapter, const cha
 
 // --- cDdDvbCiAdapter -------------------------------------------------------
 
-ddci::cDdDvbCiAdapter *ddci::cDdDvbCiAdapter::ddCiAdapter[MAXDEVICES] = { NULL };
-int ddci::cDdDvbCiAdapter::numDdCiAdapter = 0;
+cDdDvbCiAdapter *cDdDvbCiAdapter::ddCiAdapter[MAXDEVICES] = { NULL };
+int cDdDvbCiAdapter::numDdCiAdapter = 0;
 
-ddci::cDdDvbCiAdapter::cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSec, const char *AdapterNum, const char *DeviceNum, const char *DevNode)
+cDdDvbCiAdapter::cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSec, const char *AdapterNum, const char *DeviceNum, const char *DevNode)
  :cDvbCiAdapter(Device, FdCa)
  ,device(Device)
  ,fdSec(FdSec)
@@ -52,7 +52,7 @@ ddci::cDdDvbCiAdapter::cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSec, con
   cDdDvbCiAdapterProbe::probedDevices.Append((char*)*devNode);
 }
 
-ddci::cDdDvbCiAdapter::~cDdDvbCiAdapter(void)
+cDdDvbCiAdapter::~cDdDvbCiAdapter(void)
 {
   if ((index >= 0) && (index < MAXDEVICES) && (ddCiAdapter[index] == this))
      ddCiAdapter[index] = NULL;
@@ -62,7 +62,7 @@ ddci::cDdDvbCiAdapter::~cDdDvbCiAdapter(void)
   CloseSec();
 }
 
-bool ddci::cDdDvbCiAdapter::OpenSec(void)
+bool cDdDvbCiAdapter::OpenSec(void)
 {
   if (fdSec >= 0)
      return true;
@@ -70,7 +70,7 @@ bool ddci::cDdDvbCiAdapter::OpenSec(void)
   return (fdSec >= 0);
 }
 
-void ddci::cDdDvbCiAdapter::CloseSec(void)
+void cDdDvbCiAdapter::CloseSec(void)
 {
   if (fdSec < 0)
      return;
@@ -80,7 +80,7 @@ void ddci::cDdDvbCiAdapter::CloseSec(void)
   fdSec = -1;
 }
 
-cTSBuffer *ddci::cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
+cTSBuffer *cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
 {
   if (fdSec >= 0) {
      transferBuffer = new cTSTransferBuffer(this, FdDvr, fdSec, device->CardIndex() + 1);
@@ -89,7 +89,7 @@ cTSBuffer *ddci::cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
   return cDvbCiAdapter::GetTSBuffer(FdDvr);
 }
 
-bool ddci::cDdDvbCiAdapter::SetIdle(bool Idle, bool TestOnly)
+bool cDdDvbCiAdapter::SetIdle(bool Idle, bool TestOnly)
 {
   if (TestOnly || (idle == Idle))
      return true;
@@ -101,7 +101,7 @@ bool ddci::cDdDvbCiAdapter::SetIdle(bool Idle, bool TestOnly)
   return true;
 }
 
-void ddci::cDdDvbCiAdapter::Stop(void)
+void cDdDvbCiAdapter::Stop(void)
 {
   for (int i = 0; i < numDdCiAdapter; i++) {
       if ((ddCiAdapter[i] != NULL) && (ddCiAdapter[i]->transferBuffer != NULL))
@@ -111,9 +111,9 @@ void ddci::cDdDvbCiAdapter::Stop(void)
 
 // --- cDdDvbCiAdapterProbe --------------------------------------------------
 
-cStringList  ddci::cDdDvbCiAdapterProbe::probedDevices;
+cStringList  cDdDvbCiAdapterProbe::probedDevices;
 
-cDvbCiAdapter *ddci::cDdDvbCiAdapterProbe::Probe(cDevice *Device)
+cDvbCiAdapter *cDdDvbCiAdapterProbe::Probe(cDevice *Device)
 {
   cDvbCiAdapter *ci = NULL;
   struct udev  *udev = udev_new();
@@ -199,7 +199,7 @@ unref:
 
 // --- cTSTransfer -----------------------------------------------------------
 
-ddci::cTSTransfer::cTSTransfer(int ReadFd, int WriteFd, int CardIndex)
+cTSTransfer::cTSTransfer(int ReadFd, int WriteFd, int CardIndex)
  :writeFd(WriteFd)
  ,cardIndex(CardIndex)
 {
@@ -209,14 +209,14 @@ ddci::cTSTransfer::cTSTransfer(int ReadFd, int WriteFd, int CardIndex)
      Start();
 }
 
-ddci::cTSTransfer::~cTSTransfer()
+cTSTransfer::~cTSTransfer()
 {
   Cancel(3);
   if (reader)
      delete reader;
 }
 
-void ddci::cTSTransfer::Action(void)
+void cTSTransfer::Action(void)
 {
   uchar *buffer;
   while (Running()) {
@@ -230,7 +230,7 @@ void ddci::cTSTransfer::Action(void)
 
 // --- cTSTransferBuffer -----------------------------------------------------
 
-ddci::cTSTransferBuffer::cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSec, int CardIndex)
+cTSTransferBuffer::cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSec, int CardIndex)
  :cTSBuffer(FdSec, MEGABYTE(2), CardIndex)
  ,ciAdapter(CiAdapter)
 {
@@ -240,7 +240,7 @@ ddci::cTSTransferBuffer::cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr
      Start();
 }
 
-ddci::cTSTransferBuffer::~cTSTransferBuffer()
+cTSTransferBuffer::~cTSTransferBuffer()
 {
   if ((ciAdapter != NULL) && (ciAdapter->transferBuffer == this))
      ciAdapter->transferBuffer = NULL;
@@ -249,7 +249,7 @@ ddci::cTSTransferBuffer::~cTSTransferBuffer()
      delete transfer;
 }
 
-void ddci::cTSTransferBuffer::Stop(void)
+void cTSTransferBuffer::Stop(void)
 {
   Cancel(3);
   if (transfer) {
