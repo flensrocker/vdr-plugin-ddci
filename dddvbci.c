@@ -80,7 +80,7 @@ void cDdDvbCiAdapter::CloseSec(void)
   fdSec = -1;
 }
 
-cTSBuffer *cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
+cTSBufferBase *cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
 {
   if (fdSec >= 0) {
      transferBuffer = new cTSTransferBuffer(this, FdDvr, fdSec, device->CardIndex() + 1);
@@ -164,7 +164,7 @@ cDvbCiAdapter *cDdDvbCiAdapterProbe::Probe(cDevice *Device)
                     fd_ca = open(*DvbDeviceName(DEV_DVB_CA, adapterNum, deviceNum), O_RDWR);
                     if (fd_ca >= 0) {
                        int numSlots = cDvbCiAdapter::GetNumCamSlots(Device, fd_ca, NULL);
-                       isyslog("ddci: with %d cam slots", numSlots);
+                       isyslog("ddci: with %d cam slot%s", numSlots, numSlots > 1 ? "s" : "");
                        if (numSlots > 0) {
                           fd_sec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR);
                           if (fd_sec >= 0) {

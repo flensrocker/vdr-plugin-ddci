@@ -1,12 +1,12 @@
 diff --git a/ci.h b/ci.h
-index 71bbdf9..2946d37 100644
+index 71bbdf9..4e6aeaa 100644
 --- a/ci.h
 +++ b/ci.h
 @@ -72,6 +72,7 @@ public:
    };
  
  class cDevice;
-+class cTSBuffer;
++class cTSBufferBase;
  class cCamSlot;
  
  enum eModuleStatus { msNone, msReset, msPresent, msReady };
@@ -14,7 +14,7 @@ index 71bbdf9..2946d37 100644
         ///< The derived class must call Cancel(3) in its destructor.
    virtual bool Ready(void);
         ///< Returns 'true' if all present CAMs in this adapter are ready.
-+  virtual cTSBuffer *GetTSBuffer(int FdDvr) { return NULL; }
++  virtual cTSBufferBase *GetTSBuffer(int FdDvr) { return NULL; }
 +       ///< Derived classes can return a special TS buffer with features
 +       ///< like rerouting the stream through an external ci.
 +       ///< The caller must delete the buffer.
@@ -22,20 +22,38 @@ index 71bbdf9..2946d37 100644
  
  class cTPDU;
 diff --git a/device.h b/device.h
-index e2ff812..949d59e 100644
+index e2ff812..b86169a 100644
 --- a/device.h
 +++ b/device.h
-@@ -762,7 +762,7 @@ private:
+@@ -753,7 +753,14 @@ public:
+ /// sure the returned data points to a TS packet and automatically
+ /// re-synchronizes after broken packets.
+ 
+-class cTSBuffer : public cThread {
++class cTSBufferBase {
++public:
++  cTSBufferBase() {}
++  virtual ~cTSBufferBase() {}
++  virtual uchar *Get(void) = 0;
++  };
++
++class cTSBuffer : public cTSBufferBase, public cThread {
+ private:
+   int f;
+   int cardIndex;
+@@ -762,8 +769,8 @@ private:
    virtual void Action(void);
  public:
    cTSBuffer(int File, int Size, int CardIndex);
 -  ~cTSBuffer();
+-  uchar *Get(void);
 +  virtual ~cTSBuffer();
-   uchar *Get(void);
++  virtual uchar *Get(void);
    };
  
+ #endif //__DEVICE_H
 diff --git a/dvbci.c b/dvbci.c
-index 5289bbd..2ae5815 100644
+index 5289bbd..24a804f 100644
 --- a/dvbci.c
 +++ b/dvbci.c
 @@ -19,23 +19,8 @@ cDvbCiAdapter::cDvbCiAdapter(cDevice *Device, int Fd)
@@ -68,7 +86,7 @@ index 5289bbd..2ae5815 100644
    Cancel(3);
  }
  
-+cTSBuffer *cDvbCiAdapter::GetTSBuffer(int FdDvr)
++cTSBufferBase *cDvbCiAdapter::GetTSBuffer(int FdDvr)
 +{
 +  if (device)
 +     return new cTSBuffer(FdDvr, MEGABYTE(2), device->CardIndex() + 1);
@@ -143,14 +161,14 @@ index 5289bbd..2ae5815 100644
 +  DvbCiAdapterProbes.Del(this, false);
  }
 diff --git a/dvbci.h b/dvbci.h
-index adbe40d..9a4d802 100644
+index adbe40d..010c6c4 100644
 --- a/dvbci.h
 +++ b/dvbci.h
 @@ -25,7 +25,31 @@ protected:
    cDvbCiAdapter(cDevice *Device, int Fd);
  public:
    virtual ~cDvbCiAdapter();
-+  virtual cTSBuffer *GetTSBuffer(int FdDvr);
++  virtual cTSBufferBase *GetTSBuffer(int FdDvr);
 +  static int GetNumCamSlots(cDevice *Device, int Fd, cCiAdapter *CiAdapter);
 +   ///< Tests if the CA device is usable for vdr.
 +   ///< If CiAdapter is not NULL it will create the CamSlots for the given ci-adapter.
@@ -210,7 +228,7 @@ index 163fce3..1d1b655 100644
  }
  
 diff --git a/dvbdevice.h b/dvbdevice.h
-index 2072ab2..d664a3b 100644
+index 2072ab2..fb07bec 100644
 --- a/dvbdevice.h
 +++ b/dvbdevice.h
 @@ -121,7 +121,7 @@ private:
@@ -222,3 +240,12 @@ index 2072ab2..d664a3b 100644
    static cMutex bondMutex;
    cDvbDevice *bondedDevice;
    mutable bool needsDetachBondedReceivers;
+@@ -213,7 +213,7 @@ public:
+ // Receiver facilities
+ 
+ private:
+-  cTSBuffer *tsBuffer;
++  cTSBufferBase *tsBuffer;
+ protected:
+   virtual bool OpenDvr(void);
+   virtual void CloseDvr(void);
