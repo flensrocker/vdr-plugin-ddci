@@ -4,8 +4,9 @@
 #include <vdr/device.h>
 #include <vdr/dvbci.h>
 
-namespace ddci
+class ddci
 {
+public:
   class cTSTransferBuffer;
 
   class cDdDvbCiAdapter : public cDvbCiAdapter
@@ -71,6 +72,6 @@ namespace ddci
     virtual ~cTSTransferBuffer();
     void Stop(void);
   };
-}
+};
 
 #endif // __DDDVBCI_H
