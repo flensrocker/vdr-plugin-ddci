@@ -11,8 +11,6 @@
 #include <vdr/dvbci.h>
 #include <vdr/plugin.h>
 
-using namespace ddci;
-
 static const char *VERSION        = "0.0.1";
 static const char *DESCRIPTION    = "external ci-adapter";
 static const char *MAINMENUENTRY  = NULL;
@@ -20,7 +18,7 @@ static const char *MAINMENUENTRY  = NULL;
 class cPluginDdci : public cPlugin {
 private:
   // Add any member variables or functions you may need here.
-  cDdDvbCiAdapterProbe *ciAdapterProbe;
+  ddci::cDdDvbCiAdapterProbe *ciAdapterProbe;
 public:
   cPluginDdci(void);
   virtual ~cPluginDdci();
@@ -49,7 +47,7 @@ cPluginDdci::cPluginDdci(void)
   // Initialize any member variables here.
   // DON'T DO ANYTHING ELSE THAT MAY HAVE SIDE EFFECTS, REQUIRE GLOBAL
   // VDR OBJECTS TO EXIST OR PRODUCE ANY OUTPUT!
-  ciAdapterProbe = new cDdDvbCiAdapterProbe();
+  ciAdapterProbe = new ddci::cDdDvbCiAdapterProbe();
 }
 
 cPluginDdci::~cPluginDdci()
