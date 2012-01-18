@@ -4,3 +4,10 @@ VDR Plugin 'ddci' Revision History
 2011-12-26: Version 0.0.1
 
 - Initial revision.
+
+2012-01-18: Version 0.0.1b
+
+- open sec-device in non-blocking mode
+- increase TS buffers to 4MB
+- remove double call of Start()
+- add some Makefile improvements

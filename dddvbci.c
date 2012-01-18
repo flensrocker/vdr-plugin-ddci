@@ -66,7 +66,7 @@ bool cDdDvbCiAdapter::OpenSec(void)
 {
   if (fdSec >= 0)
      return true;
-  fdSec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR);
+  fdSec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR | O_NONBLOCK);
   return (fdSec >= 0);
 }
 
@@ -166,7 +166,7 @@ cDvbCiAdapter *cDdDvbCiAdapterProbe::Probe(cDevice *Device)
                        int numSlots = cDvbCiAdapter::GetNumCamSlots(Device, fd_ca, NULL);
                        isyslog("ddci: with %d cam slot%s", numSlots, numSlots > 1 ? "s" : "");
                        if (numSlots > 0) {
-                          fd_sec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR);
+                          fd_sec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR | O_NONBLOCK);
                           if (fd_sec >= 0) {
                              ci = new cDdDvbCiAdapter(Device, fd_ca, fd_sec, adapterNum, deviceNum, devnode);
                              fd_ca = -1;
@@ -204,7 +204,7 @@ cTSTransfer::cTSTransfer(int ReadFd, int WriteFd, int CardIndex)
  ,cardIndex(CardIndex)
 {
   SetDescription("TS transfer on device %d", CardIndex);
-  reader = new cTSBuffer(ReadFd, MEGABYTE(2), CardIndex);
+  reader = new cTSBuffer(ReadFd, MEGABYTE(4), CardIndex);
   if (reader != NULL)
      Start();
 }
@@ -231,13 +231,11 @@ void cTSTransfer::Action(void)
 // --- cTSTransferBuffer -----------------------------------------------------
 
 cTSTransferBuffer::cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSec, int CardIndex)
- :cTSBuffer(FdSec, MEGABYTE(2), CardIndex)
+ :cTSBuffer(FdSec, MEGABYTE(4), CardIndex)
  ,ciAdapter(CiAdapter)
 {
   SetDescription("TS transfer buffer on device %d", CardIndex);
   transfer = new cTSTransfer(FdDvr, FdSec, CardIndex);
-  if (transfer != NULL)
-     Start();
 }
 
 cTSTransferBuffer::~cTSTransferBuffer()

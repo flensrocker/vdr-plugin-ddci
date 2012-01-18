@@ -11,6 +11,8 @@
 #
 PLUGIN = ddci
 
+WANT_I18N ?= yes
+
 ### The version number of this plugin (taken from the main source file):
 
 VERSION = $(shell grep 'static const char \*VERSION *=' $(PLUGIN).c | awk '{ print $$6 }' | sed -e 's/[";]//g')
@@ -23,9 +25,9 @@ LDFLAGS  += `pkg-config --libs libudev`
 
 ### The directory environment:
 
-VDRDIR = ../../..
-LIBDIR = ../../lib
-TMPDIR = /tmp
+VDRDIR ?= ../../..
+LIBDIR ?= ../../lib
+TMPDIR ?= /tmp
 
 ### Make sure that necessary options are included:
 
@@ -72,6 +74,7 @@ $(DEPFILE): Makefile
 
 -include $(DEPFILE)
 
+ifdef WANT_I18N
 ### Internationalization (I18N):
 
 PODIR     = po
@@ -93,6 +96,7 @@ $(I18Npot): $(wildcard *.c)
 $(I18Nmsgs): $(LOCALEDIR)/%/LC_MESSAGES/vdr-$(PLUGIN).mo: $(PODIR)/%.mo
 	@mkdir -p $(dir $@)
 	cp $< $@
+endif
 
 .PHONY: i18n
 i18n: $(I18Nmsgs) $(I18Npot)
