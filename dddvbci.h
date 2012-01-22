@@ -14,7 +14,8 @@ private:
   static int numDdCiAdapter;
 
   cDevice *device;
-  int     fdSec;
+  int     fdSecW;
+  int     fdSecR;
   cString devNode;
   cString adapterNum;
   cString deviceNum;
@@ -25,7 +26,7 @@ private:
   bool OpenSec(void);
   void CloseSec(void);
 public:
-  cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSec, const char *AdapterNum, const char *DeviceNum, const char *DevNode);
+  cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSecW, int FdSecR, const char *AdapterNum, const char *DeviceNum, const char *DevNode);
   virtual ~cDdDvbCiAdapter(void);
   virtual cTSBufferBase *GetTSBuffer(int FdDvr);
   virtual bool SetIdle(bool Idle, bool TestOnly);
@@ -44,28 +45,18 @@ public:
   virtual cDvbCiAdapter *Probe(cDevice *Device);
 };
 
-class cTSTransfer : public cThread
-{
-private:
-  int  writeFd;
-  int  cardIndex;
-  cTSBuffer *reader;
-
-  virtual void Action(void);
-public:
-  cTSTransfer(int ReadFd, int WriteFd, int CardIndex);
-  ~cTSTransfer();
-};
-
 class cTSTransferBuffer : public cTSBuffer
 {
 private:
   cDdDvbCiAdapter *ciAdapter;
-  cTSTransfer *transfer;
+  cTSBuffer *dvrReader;
+  int cardIndex;
+  int fdSecW;
 
 public:
-  cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSec, int CardIndex);
+  cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSecW, int FdSecR, int CardIndex);
   virtual ~cTSTransferBuffer();
+  virtual uchar *Get(void);
   void Stop(void);
 };
 

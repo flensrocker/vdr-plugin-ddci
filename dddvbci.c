@@ -29,10 +29,11 @@ static bool DvbDeviceNodeExists(const char *Name, const char *Adapter, const cha
 cDdDvbCiAdapter *cDdDvbCiAdapter::ddCiAdapter[MAXDEVICES] = { NULL };
 int cDdDvbCiAdapter::numDdCiAdapter = 0;
 
-cDdDvbCiAdapter::cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSec, const char *AdapterNum, const char *DeviceNum, const char *DevNode)
+cDdDvbCiAdapter::cDdDvbCiAdapter(cDevice *Device, int FdCa, int FdSecW, int FdSecR, const char *AdapterNum, const char *DeviceNum, const char *DevNode)
  :cDvbCiAdapter(Device, FdCa)
  ,device(Device)
- ,fdSec(FdSec)
+ ,fdSecW(FdSecW)
+ ,fdSecR(FdSecR)
  ,devNode(DevNode)
  ,adapterNum(AdapterNum)
  ,deviceNum(DeviceNum)
@@ -64,26 +65,35 @@ cDdDvbCiAdapter::~cDdDvbCiAdapter(void)
 
 bool cDdDvbCiAdapter::OpenSec(void)
 {
-  if (fdSec >= 0)
+  if ((fdSecW >= 0) && (fdSecR >= 0))
      return true;
-  fdSec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR | O_NONBLOCK);
-  return (fdSec >= 0);
+  if (fdSecR < 0)
+     fdSecR = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDONLY | O_NONBLOCK);
+  if (fdSecW < 0)
+     fdSecW = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_WRONLY | O_NONBLOCK);
+  return (fdSecW >= 0) && (fdSecR >= 0);
 }
 
 void cDdDvbCiAdapter::CloseSec(void)
 {
-  if (fdSec < 0)
+  if ((fdSecW < 0) && (fdSecR < 0))
      return;
   if (transferBuffer)
      transferBuffer->Stop();
-  close(fdSec);
-  fdSec = -1;
+  if (fdSecW >= 0) {
+     close(fdSecW);
+     fdSecW = -1;
+     }
+  if (fdSecR >= 0) {
+     close(fdSecR);
+     fdSecR = -1;
+     }
 }
 
 cTSBufferBase *cDdDvbCiAdapter::GetTSBuffer(int FdDvr)
 {
-  if (fdSec >= 0) {
-     transferBuffer = new cTSTransferBuffer(this, FdDvr, fdSec, device->CardIndex() + 1);
+  if ((fdSecW >= 0) && (fdSecR >= 0)) {
+     transferBuffer = new cTSTransferBuffer(this, FdDvr, fdSecW, fdSecR, device->CardIndex() + 1);
      return transferBuffer;
      }
   return cDvbCiAdapter::GetTSBuffer(FdDvr);
@@ -130,7 +140,8 @@ cDvbCiAdapter *cDdDvbCiAdapterProbe::Probe(cDevice *Device)
   const char *adapterNum;
   const char *deviceNum;
   int fd_ca = -1;
-  int fd_sec = -1;
+  int fd_sec_r = -1;
+  int fd_sec_w = -1;
   if (e == NULL) {
      esyslog("ddci: can't enum devices");
      goto unref;
@@ -166,12 +177,18 @@ cDvbCiAdapter *cDdDvbCiAdapterProbe::Probe(cDevice *Device)
                        int numSlots = cDvbCiAdapter::GetNumCamSlots(Device, fd_ca, NULL);
                        isyslog("ddci: with %d cam slot%s", numSlots, numSlots > 1 ? "s" : "");
                        if (numSlots > 0) {
-                          fd_sec = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDWR | O_NONBLOCK);
-                          if (fd_sec >= 0) {
-                             ci = new cDdDvbCiAdapter(Device, fd_ca, fd_sec, adapterNum, deviceNum, devnode);
-                             fd_ca = -1;
-                             fd_sec = -1;
-                             goto unref;
+                          fd_sec_r = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_RDONLY | O_NONBLOCK);
+                          if (fd_sec_r >= 0) {
+                             fd_sec_w = open(*DvbDeviceName("sec", adapterNum, deviceNum), O_WRONLY | O_NONBLOCK);
+                             if (fd_sec_w >= 0) {
+                                isyslog("ddci: sec read fd = %d, write fd = %d", fd_sec_r, fd_sec_w);
+                                ci = new cDdDvbCiAdapter(Device, fd_ca, fd_sec_w, fd_sec_r, adapterNum, deviceNum, devnode);
+                                // don't close file descriptors, only free udev resources
+                                fd_ca = -1;
+                                fd_sec_r = -1;
+                                fd_sec_w = -1;
+                                goto unref;
+                                }
                              }
                           }
                        }
@@ -184,8 +201,10 @@ cDvbCiAdapter *cDdDvbCiAdapterProbe::Probe(cDevice *Device)
         l = udev_list_entry_get_next(l);
         }
 unref:
-  if (fd_sec >= 0)
-     close(fd_sec);
+  if (fd_sec_r >= 0)
+     close(fd_sec_r);
+  if (fd_sec_w >= 0)
+     close(fd_sec_w);
   if (fd_ca >= 0)
      close(fd_ca);
   if (dev != NULL)
@@ -197,45 +216,17 @@ unref:
   return ci;
 }
 
-// --- cTSTransfer -----------------------------------------------------------
-
-cTSTransfer::cTSTransfer(int ReadFd, int WriteFd, int CardIndex)
- :writeFd(WriteFd)
- ,cardIndex(CardIndex)
-{
-  SetDescription("TS transfer on device %d", CardIndex);
-  reader = new cTSBuffer(ReadFd, MEGABYTE(4), CardIndex);
-  if (reader != NULL)
-     Start();
-}
-
-cTSTransfer::~cTSTransfer()
-{
-  Cancel(3);
-  if (reader)
-     delete reader;
-}
-
-void cTSTransfer::Action(void)
-{
-  uchar *buffer;
-  while (Running()) {
-        buffer = reader->Get();
-        if (buffer != NULL) {
-           if (safe_write(writeFd, buffer, TS_SIZE) != TS_SIZE)
-              esyslog("ddci: write error on transfer buffer on device %d", cardIndex);
-           }
-        }
-}
-
 // --- cTSTransferBuffer -----------------------------------------------------
 
-cTSTransferBuffer::cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSec, int CardIndex)
- :cTSBuffer(FdSec, MEGABYTE(4), CardIndex)
+cTSTransferBuffer::cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSecW, int FdSecR, int CardIndex)
+ :cTSBuffer(FdSecR, MEGABYTE(4), CardIndex)
  ,ciAdapter(CiAdapter)
+ ,dvrReader(NULL)
+ ,cardIndex(CardIndex)
+ ,fdSecW(FdSecW)
 {
   SetDescription("TS transfer buffer on device %d", CardIndex);
-  transfer = new cTSTransfer(FdDvr, FdSec, CardIndex);
+  dvrReader = new cTSBuffer(FdDvr, MEGABYTE(4), CardIndex);
 }
 
 cTSTransferBuffer::~cTSTransferBuffer()
@@ -243,15 +234,36 @@ cTSTransferBuffer::~cTSTransferBuffer()
   if ((ciAdapter != NULL) && (ciAdapter->transferBuffer == this))
      ciAdapter->transferBuffer = NULL;
   Cancel(3);
-  if (transfer)
-     delete transfer;
+  if (dvrReader)
+     delete dvrReader;
+}
+
+uchar *cTSTransferBuffer::Get(void)
+{
+  uchar *data;
+  if (dvrReader) {
+     data = dvrReader->Get();
+     if (data != NULL) {
+        //dsyslog("ddci: dvr: PID %d (%d), %s scrambled", TsPid(data), TsContinuityCounter(data), TsIsScrambled(data) ? "is" : "not");
+        //dsyslog("ddci: write data %p to sec on device %d", data, cardIndex);
+        if (safe_write(fdSecW, data, TS_SIZE) != TS_SIZE)
+           esyslog("ddci: sec write error on device %d", cardIndex);
+        //dsyslog("ddci: wrote data to sec on device %d", cardIndex);
+        }
+     }
+  //dsyslog("ddci: get data from sec on device %d", cardIndex);
+  data = cTSBuffer::Get();
+  //dsyslog("ddci: got %p from sec on device %d", data, cardIndex);
+  //if (data != NULL)
+  //   dsyslog("ddci:  sec: PID %d (%d), %s scrambled", TsPid(data), TsContinuityCounter(data), TsIsScrambled(data) ? "is" : "not");
+  return data;
 }
 
 void cTSTransferBuffer::Stop(void)
 {
   Cancel(3);
-  if (transfer) {
-     delete transfer;
-     transfer = NULL;
+  if (dvrReader) {
+     delete dvrReader;
+     dvrReader = NULL;
      }
 }

@@ -11,3 +11,8 @@ VDR Plugin 'ddci' Revision History
 - increase TS buffers to 4MB
 - remove double call of Start()
 - add some Makefile improvements
+
+2012-01-22: Version 0.0.1c
+
+- open sec two times (WRONLY and RDONLY)
+- remove one thread in chain dvr->sec->vdr
