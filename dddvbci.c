@@ -219,7 +219,7 @@ unref:
 // --- cTSTransferBuffer -----------------------------------------------------
 
 cTSTransferBuffer::cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSecW, int FdSecR, int CardIndex)
- :cTSBuffer(FdSecR, MEGABYTE(4), CardIndex)
+ :cTSBuffer(FdSecR, 100 * TS_SIZE + 1, CardIndex) // cRingbufferLinear reads Size() - Margin - 1 bytes, this assures it reads multiple of TS_SIZE
  ,ciAdapter(CiAdapter)
  ,dvrReader(NULL)
  ,cardIndex(CardIndex)
