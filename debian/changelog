@@ -1,3 +1,9 @@
+vdr-plugin-ddci (0.0.1c-0yavdr0~precise) precise; urgency=medium
+
+  * new upstream snapshot
+
+ -- Lars Hanisch <dvb@flensrocker.de>  Wed, 21 Nov 2012 22:03:12 +0100
+
 vdr-plugin-ddci (0.0.1-0yavdr0~oneiric) oneiric; urgency=medium
 
   * new upstream git snapshot
