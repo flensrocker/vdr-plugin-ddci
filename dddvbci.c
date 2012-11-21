@@ -224,6 +224,7 @@ cTSTransferBuffer::cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int 
  ,dvrReader(NULL)
  ,cardIndex(CardIndex)
  ,fdSecW(FdSecW)
+ ,dataWritten(false)
 {
   SetDescription("TS transfer buffer on device %d", CardIndex);
   dvrReader = new cTSBuffer(FdDvr, MEGABYTE(4), CardIndex);
@@ -249,13 +250,16 @@ uchar *cTSTransferBuffer::Get(void)
         if (safe_write(fdSecW, data, TS_SIZE) != TS_SIZE)
            esyslog("ddci: sec write error on device %d", cardIndex);
         //dsyslog("ddci: wrote data to sec on device %d", cardIndex);
+        dataWritten = true;
         }
      }
-  //dsyslog("ddci: get data from sec on device %d", cardIndex);
+  if (!dataWritten)
+     return NULL;
+  dsyslog("ddci: get data from sec on device %d", cardIndex);
   data = cTSBuffer::Get();
-  //dsyslog("ddci: got %p from sec on device %d", data, cardIndex);
-  //if (data != NULL)
-  //   dsyslog("ddci:  sec: PID %d (%d), %s scrambled", TsPid(data), TsContinuityCounter(data), TsIsScrambled(data) ? "is" : "not");
+  dsyslog("ddci: got %p from sec on device %d", data, cardIndex);
+  if (data != NULL)
+     dsyslog("ddci:  sec: PID %d (%d), %s scrambled", TsPid(data), TsContinuityCounter(data), TsIsScrambled(data) ? "is" : "not");
   return data;
 }
 

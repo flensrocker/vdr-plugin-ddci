@@ -52,6 +52,7 @@ private:
   cTSBuffer *dvrReader;
   int cardIndex;
   int fdSecW;
+  bool dataWritten;
 
 public:
   cTSTransferBuffer(cDdDvbCiAdapter *CiAdapter, int FdDvr, int FdSecW, int FdSecR, int CardIndex);
