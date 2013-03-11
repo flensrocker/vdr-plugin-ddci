@@ -1,3 +1,9 @@
+vdr-plugin-ddci (0.0.2-0yavdr0~precise) precise; urgency=medium
+
+  * switch to new Makefile
+
+ -- Lars Hanisch <dvb@flensrocker.de>  Mon, 11 Mar 2013 13:04:20 +0100
+
 vdr-plugin-ddci (0.0.1c-0yavdr0~precise) precise; urgency=medium
 
   * new upstream snapshot
